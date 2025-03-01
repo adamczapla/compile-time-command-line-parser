@@ -5,7 +5,6 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 
 include(FetchContent)
 
-# ctre als Dependency hinzufügen
 FetchContent_Declare(
   ctre
   GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
