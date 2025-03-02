@@ -210,6 +210,190 @@ constexpr auto to_double(long long int_part, long long frac_part, unsigned int f
   return int_part + (int_part >= 0 ? fraction : -fraction);
 }
 
+template <options opts, size_t capacity>
+class parser {
+public:    
+    
+  template <size_t argc>
+  class parser_result_t {
+  public:
+
+    template <options, size_t> friend class parser;
+        
+    constexpr operator bool() const noexcept { return !errors.right_size; }
+
+    template <literal_string opt, typename opt_type>
+    constexpr auto get() const noexcept -> std::pair<std::optional<opt_type>, 
+                                                     std::optional<error_code>> {        
+      auto const m_pos = rng::find_if(options_map, [](std::string str) { 
+        return str == opt.to_string(); }, [](auto const& pair) { 
+          return pair.first.name; });
+          
+      if (m_pos != rng::end(options_map)) {
+        return convert_raw_value<opt_type>(m_pos->first, m_pos->second);
+      }
+
+      auto const options = rng::subrange{rng::begin(opts), rng::end(opts)};
+      auto const o_pos = rng::find_if(options, [](std::string str) { 
+        return str == opt.to_string(); }, &option::name);
+
+      if (o_pos == rng::end(options)) { return {{}, error_code::option_not_found}; }
+            
+      auto const default_value = std::string_view{o_pos->defval};
+      if (default_value.empty()) { return {{}, error_code::option_not_found}; }
+
+      return convert_raw_value<opt_type>(*o_pos, default_value);            
+    }
+
+    parse_errors<opts.size> errors{};
+
+  private:
+
+    constexpr parser_result_t() = default;
+        
+    template <typename opt_type>
+    constexpr auto convert_raw_value(option const& opt, std::string_view raw_opt_value) const noexcept
+    -> std::pair<std::optional<opt_type>, std::optional<error_code>> {        
+      if constexpr (std::integral<opt_type>) {
+        if (opt.value != option::integral) { return {{}, error_code::incorrect_type}; }
+        opt_type result{};
+        auto const [_, ec] = std::from_chars(raw_opt_value.data(), 
+                                             raw_opt_value.data() + raw_opt_value.size(), 
+                                             result);
+        if (ec != std::errc{}) { return {{}, error_code::conversion_error}; }
+        return {result, {}};
+      } else if constexpr (std::is_same_v<opt_type, std::string_view>) { 
+        if (opt.value != option::string) { return {{}, error_code::incorrect_type}; }
+        return {raw_opt_value, {}};
+      }  else if constexpr (std::floating_point<opt_type>) { 
+        if (opt.value != option::floating_point) { return {{}, error_code::incorrect_type}; }
+        return raw_value_as_double(raw_opt_value);
+      } else {
+        return {{}, error_code::unknown_type};
+      }
+    }
+    
+    constexpr auto raw_value_as_double(std::string_view str) const noexcept 
+    -> std::pair<std::optional<long double>, std::optional<error_code>> {        
+      long long int_part{0};
+      auto const end_pos = rng::data(str) + rng::size(str);
+      auto const [ptr, ec] = std::from_chars(rng::data(str), end_pos, int_part);
+
+      if (ec != std::errc{}) { return {{}, ctclp::error_code::conversion_error}; }
+      if (ptr == end_pos) { return {{static_cast<long double>(int_part)}, {}}; } 
+      if (*ptr != '.') { return {{}, ctclp::error_code::conversion_error}; }
+
+      long long frac_part{0};
+      auto const [ptr_frac, ec_frac] = std::from_chars(rng::next(ptr), end_pos, frac_part);
+      if (ptr_frac != end_pos) { return {{}, ctclp::error_code::conversion_error}; }
+
+      if (ec_frac != std::errc{} && std::distance(ptr+1, ptr_frac) == 0) { 
+          return {{static_cast<long double>(int_part)}, {}};
+      } 
+
+      if (ec_frac != std::errc{}) { return {{}, ctclp::error_code::conversion_error}; }  
+
+      auto is_neg_zero = false;
+      if (auto const pos = str.find('.', 0); pos != std::string_view::npos) {
+          if (str.substr(0, pos) == "-0") { is_neg_zero = true; }
+      }
+
+      auto frac_digit = std::distance(rng::next(ptr), ptr_frac);
+      if (is_neg_zero) { frac_part = -frac_part; } 
+
+      return {{to_double(int_part, frac_part, frac_digit)}, {}};    
+    }
+        
+    std::array<std::pair<option, std::string_view>, argc> options_map{};
+
+  };
+
+  template <size_t argc, auto argv>
+  static constexpr auto try_parse() noexcept {
+    return parser{}.parse<argc>(argv, std::make_index_sequence<argc>{});
+  }
+
+  template <size_t argc>
+  static constexpr auto try_parse(char const* (&argv)[argc]) noexcept {
+    return parser{}.parse<argc>(argv, std::make_index_sequence<argc>{});
+  }
+
+private:
+    
+  constexpr parser() = default;
+
+  template <size_t argc, size_t... idx>
+  constexpr auto parse(auto const& argv, std::index_sequence<idx...>) const noexcept {
+    parser_result_t<argc> result{};
+    (parse_option<idx, argc>(argv, result), ...);
+    return result;
+  }
+
+  template <size_t... indx>
+  static constexpr auto get_parse_result(std::string_view input, std::index_sequence<indx...>) noexcept {
+    std::optional<std::pair<size_t, std::string_view>> result{};
+
+    std::tuple match_result_tuple{
+      (input.contains(std::get<0>(std::get<indx>(regex_tuple)))
+        ? ctre::match<std::get<2>(std::get<indx>(regex_tuple))>(input)
+        : ctre::match<std::get<2>(std::get<indx>(regex_tuple))>(std::string_view{"..."}))
+      ...  
+    };
+
+    (void) ((std::get<indx>(match_result_tuple) 
+      ? (result = std::optional{std::pair{indx, std::string_view{std::get<indx>(match_result_tuple).
+        template get<std::get<1>(std::get<indx>(regex_tuple))>()}}})
+      : std::optional<std::pair<size_t, std::string_view>>{}), ...
+    );
+            
+    return result;
+  }
+
+  template <size_t idx, size_t argc>
+  constexpr auto parse_option(auto const& argv, parser_result_t<argc>& result) const noexcept {        
+    auto parsed_result = get_parse_result(argv[idx], std::make_index_sequence<opts.size>{});
+        
+    if (!parsed_result.has_value()) {
+      result.errors.append(parse_error_info{argv[idx], error_code::parse_error});
+      return; 
+    } 
+        
+    result.options_map[idx] = std::pair{
+      opts.data[parsed_result->first], parsed_result->second
+    };
+  }
+
+public:
+    
+  template <auto regex_array, size_t... idx>
+  static constexpr auto make_regex_tuple(std::index_sequence<idx...>) noexcept {
+    return std::tuple{
+      std::tuple{
+        std::string_view{std::string_view{opts.data[idx].name}},
+        fixed_string{to_char_array<std::strlen(opts.data[idx].name)>(opts.data[idx].name)},  
+        fixed_string{to_right_size<regex_array[idx].first, regex_array[idx].second>()}
+      }...
+    };
+  }
+
+  template <size_t... idx>
+  static constexpr auto prepare_regex_array(std::index_sequence<idx...>) noexcept {
+    std::array<std::pair<std::array<char, capacity>, size_t>, opts.size> result{};
+    ((result[idx] = to_array<capacity, [] { 
+      return std::string{opts.data[idx].regex}; }>()) , ...);
+    return result;
+  }
+
+  static constexpr auto regex_tuple = [] { 
+    constexpr auto regex_array = [] { 
+      return prepare_regex_array(std::make_index_sequence<opts.size>{}); 
+    }();
+    return make_regex_tuple<regex_array>(std::make_index_sequence<opts.size>{});
+  }();
+
+};
+
+
 
 } // ctclp
 
