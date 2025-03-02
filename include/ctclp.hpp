@@ -2,11 +2,38 @@
 
 #include <ctre.hpp>
 #include <ranges>
+#include <string>
+#include <string_view>
+#include <array>
+#include <algorithm>
+#include <ostream>
+#include <tuple>
 
 namespace ctclp {
 
 namespace rng = std::ranges;
 using ctll::fixed_string;
+
+template <auto value> consteval auto& to_static() { return value; }
+
+template <auto max_size, auto string_builder> consteval auto to_string_view() {
+  constexpr auto intermediate_data = [] {   
+    std::array<char, max_size> max_size_array{};
+    auto const end_pos = rng::copy(string_builder(), rng::begin(max_size_array));
+    auto const right_size = rng::distance(rng::cbegin(max_size_array), end_pos.out);
+    return std::pair{max_size_array, right_size};
+  }();
+
+  constexpr auto right_size_array = [&] {
+    std::array<char, intermediate_data.second + 1> right_size_array{};
+    rng::copy_n(rng::cbegin(intermediate_data.first), intermediate_data.second,
+                rng::begin(right_size_array));
+    right_size_array[intermediate_data.second] = '\0';
+    return right_size_array; 
+  }();
+
+  return std::string_view{to_static<right_size_array>()}; 
+}
 
 template <size_t size>
 struct literal_string {
@@ -111,7 +138,7 @@ struct options {
       }, values);
     }(), "Default value does not match any of the provided values.");
       
-    constexpr auto opt_regex = cex::to_string_view<128, [] {
+    constexpr auto opt_regex = to_string_view<128, [] {
       return std::apply([](auto const&... values) {
         size_t cnt{sizeof...(values)};
         auto result = std::string{"\\s*(--"} + opt_name.to_string() + "=(?<" 
