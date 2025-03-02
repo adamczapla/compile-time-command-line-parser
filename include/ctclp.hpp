@@ -161,6 +161,44 @@ struct options {
 
 };
 
+enum class error_code { parse_error, option_not_found, incorrect_type, conversion_error, unknown_type };
+
+auto operator<<(std::ostream& os, error_code const& ec) -> std::ostream& {
+  constexpr std::array<std::string_view, 5> error_messages {"parse_error", "option_not_found", 
+                                                            "incorrect_type", "conversion_error", 
+                                                            "unknown_type"};
+  auto const num = static_cast<int>(ec);
+  return os << "Error code: " << num << " (" << error_messages[num] << ")";
+}
+
+using parse_error_info = std::tuple<std::string_view, error_code>;
+
+template <size_t max_size>
+struct parse_errors {    
+
+  constexpr auto begin() const noexcept { return data.begin(); }
+  constexpr auto end() const noexcept { return std::next(begin(), right_size); }
+
+  constexpr auto append(parse_error_info const& error_info) noexcept -> parse_errors& {
+    data[right_size++] = error_info;
+    return *this;
+  }
+
+  std::array<parse_error_info, max_size> data{};
+  size_t right_size{0};
+
+  friend auto operator<<(std::ostream& os, parse_errors const& errors) noexcept -> std::ostream& {
+    os << "Errors:\n";
+    for (auto const& error_info : errors) {
+      os << "  " << std::get<0>(error_info) 
+         << ", " << std::get<1>(error_info)
+         << '\n';
+    }
+    return os;
+  }
+    
+};
+
 
 
 } // ctclp
