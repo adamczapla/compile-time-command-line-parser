@@ -199,6 +199,16 @@ struct parse_errors {
     
 };
 
+constexpr auto pow_base10(long long exp) noexcept {
+  long double result{1};
+  for (auto i : std::views::iota(0, std::llabs(exp))) {result *= 10; }
+  return exp < 0 ? 1/result : result;
+}
+
+constexpr auto to_double(long long int_part, long long frac_part, unsigned int frac_digits) {
+  long double fraction = frac_part / pow_base10(frac_digits);
+  return int_part + (int_part >= 0 ? fraction : -fraction);
+}
 
 
 } // ctclp
