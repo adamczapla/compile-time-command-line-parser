@@ -162,7 +162,6 @@ struct options {
   template <literal_string opt_name, option::type opt_type, option_values opt_values, 
             option_default_value opt_default_value = default_value<"">> 
   consteval auto add() noexcept {
-      
     static_assert([&] {
       return std::apply([&](auto const&... values) {
         if (opt_default_value{}.to_string().empty()) { return true; }
@@ -372,7 +371,6 @@ private:
   template <size_t... indx>
   static constexpr auto get_parse_result(std::string_view input, std::index_sequence<indx...>) noexcept {
     std::optional<std::pair<size_t, std::string_view>> result{};
-
     std::tuple match_result_tuple{
       (input.contains(std::get<0>(std::get<indx>(regex_tuple)))
         ? ctre::match<std::get<2>(std::get<indx>(regex_tuple))>(input)
