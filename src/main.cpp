@@ -3,9 +3,9 @@
 
 template <auto& parse_result>
 constexpr void print_result() {
-  // static constexpr auto result = parse_result.template get<"para1", int>();
-  //static constexpr auto result = parse_result.template get<"para2", std::string_view>();
-  static constexpr auto result = parse_result.template get<"para3", long double>();
+  static constexpr auto result = parse_result.template get<"para1", int>();
+  // static constexpr auto result = parse_result.template get<"para2", std::string_view>();
+  // static constexpr auto result = parse_result.template get<"para3", long double>();
   if constexpr (result.first.has_value()) {
     std::cout << *result.first << '\n';
   } else {
@@ -31,13 +31,12 @@ auto main() -> int {
     Compile-Time
   */ 
 
-  // static constexpr char const* argv[]{nullptr};
-  static constexpr char const* argv[] = {"--para1=33"}; 
-  // static constexpr char const* argv[] = {"--para2=hello", "--para3=0.0001", "--para1=33"};
-  // static constexpr char const* argv[] = {"--para1=33", "--para3=0.0001"};
+  static constexpr char const* argv[]{"programm"};
+  // static constexpr char const* argv[] = {"programm", "--para1=33"}; 
+  // static constexpr char const* argv[] = {"programm", "--para2=hello", "--para3=0.0001", "--para1=33"};
+  // static constexpr char const* argv[] = {"programm", "--para1=33", "--para3=0.0001"};
   static constexpr auto argc = std::size(argv);
   static constexpr auto parser_result = ctclp::parser<opts, 256>::try_parse<argc, argv>();
-  
   if constexpr (parser_result) {
     print_result<parser_result>();
   } else {
@@ -47,20 +46,20 @@ auto main() -> int {
   /*
       Run-time
   */
-  //char const* argv_2[] = {"--para2=hello", "--para1=33"};
-  char const* argv_2[] = {"--para1=33", "--para2=hello"};
+  //char const* argv_2[] = {"programm", "--para2=hello", "--para1=33"};
+  char const* argv_2[] = {"programm", "--para1=33", "--para2=hello"};
   auto const parser_result_2 = ctclp::parser<opts, 256>::try_parse(argv_2);
 
   if (parser_result_2) {
-    // auto result = parser_result_2.template get<"para3", long double>();
-    auto result = parser_result.template get<"para1", int>();
+    auto result = parser_result_2.template get<"para3", long double>();
+    // auto result = parser_result_2.template get<"para1", int>();
     if  (result.first.has_value()) {
       std::cout << *result.first << '\n';
     } else {
       std::cout << *result.second << '\n';
     }
   } else {
-    std::cout << parser_result.errors << '\n';
+    std::cout << parser_result_2.errors << '\n';
   }
 
   return 0;
