@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <ostream>
 #include <tuple>
+#include <concepts>
+#include <cstring>
 
 namespace ctclp {
 
@@ -16,7 +18,8 @@ using ctll::fixed_string;
 
 template <auto value> consteval auto& to_static() { return value; }
 
-template <auto max_size, auto string_builder> consteval auto to_string_view() {
+template <auto max_size, auto string_builder> 
+consteval auto to_string_view() {
   constexpr auto intermediate_data = [] {   
     std::array<char, max_size> max_size_array{};
     auto const end_pos = rng::copy(string_builder(), rng::begin(max_size_array));
@@ -33,6 +36,17 @@ template <auto max_size, auto string_builder> consteval auto to_string_view() {
   }();
 
   return std::string_view{to_static<right_size_array>()}; 
+}
+
+template <auto max_size, auto string_builder> 
+consteval auto to_array() {
+  constexpr auto result = [] {   
+    std::array<char, max_size> max_size_array{};
+    auto const end_pos = rng::copy(string_builder(), rng::begin(max_size_array));
+    auto const right_size = rng::distance(rng::cbegin(max_size_array), end_pos.out);
+    return std::pair{max_size_array, right_size};
+  }();
+  return result; 
 }
 
 template <size_t size>
@@ -80,7 +94,8 @@ struct option {
 
 };
 
-template <literal_string... opt_values> struct values {
+template <literal_string... opt_values> 
+struct values {
 
   using values_t = void;
   
@@ -97,7 +112,8 @@ concept option_values = requires {
 
 };
 
-template <literal_string value> struct default_value {
+template <literal_string value> 
+struct default_value {
 
   using default_value_t = void;
 
@@ -118,6 +134,26 @@ concept option_default_value = requires {
 
 };
 
+template <auto oversized_array, size_t right_size>
+constexpr auto to_right_size() {
+  std::array<char, right_size> result{};
+  rng::copy_n(rng::begin(oversized_array), right_size, rng::begin(result));
+  return result;
+}
+
+template <size_t size>
+constexpr auto to_char_array(const char* str) {
+  std::array<char, size> result{};
+  rng::copy_n(str, size, rng::begin(result));
+  return result;
+}
+
+constexpr auto strlen(const char* start) -> size_t {
+    char const* end = start;
+    while (*end != '\0') { ++end; }
+    return end - start;
+}
+
 template <auto capacity>
 struct options {
 
@@ -125,31 +161,30 @@ struct options {
 
   template <literal_string opt_name, option::type opt_type, option_values opt_values, 
             option_default_value opt_default_value = default_value<"">> 
-  consteval auto& add() noexcept {
-    static constexpr auto default_value = opt_default_value{};
-    static constexpr auto values = opt_values{}.as_tuple();
+  consteval auto add() noexcept {
       
     static_assert([&] {
-      return std::apply([](auto const&... values) {
-        if (default_value.to_string().empty()) { return true; }
+      return std::apply([&](auto const&... values) {
+        if (opt_default_value{}.to_string().empty()) { return true; }
         bool is_valid{false};
-        ((is_valid += (values.to_string() == default_value.to_string())), ...);
+        ((is_valid += (values.to_string() == opt_default_value{}.to_string())), ...);
         return is_valid;
-      }, values);
+      }, opt_values{}.as_tuple());
     }(), "Default value does not match any of the provided values.");
       
     constexpr auto opt_regex = to_string_view<128, [] {
-      return std::apply([](auto const&... values) {
+       return std::apply([](auto const&... values) {
         size_t cnt{sizeof...(values)};
         auto result = std::string{"\\s*(--"} + opt_name.to_string() + "=(?<" 
                                              + opt_name.to_string() + ">(";
         ((result += values.to_string() + (--cnt ? "|" : "")) , ...);
         return result.append("))){0,1}");
-      }, values);
+      }, opt_values{}.as_tuple());
     }>();
-      
+
     data[size++] = option{opt_name.to_string_view(), opt_type, 
-                          default_value.to_string_view(), opt_regex};
+                          opt_default_value{}.to_string_view(), 
+                          opt_regex};
     return *this;
   }
 
@@ -199,15 +234,31 @@ struct parse_errors {
     
 };
 
+constexpr auto llabs(long long exp) noexcept -> long long {
+  return exp < 0 ? -exp : exp;
+}
+
 constexpr auto pow_base10(long long exp) noexcept {
   long double result{1};
-  for (auto i : std::views::iota(0, std::llabs(exp))) {result *= 10; }
+  for (auto i : std::views::iota(0, llabs(exp))) {result *= 10; }
   return exp < 0 ? 1/result : result;
 }
 
-constexpr auto to_double(long long int_part, long long frac_part, unsigned int frac_digits) {
+constexpr auto to_double(long long int_part, long long frac_part, unsigned int frac_digits) noexcept {
   long double fraction = frac_part / pow_base10(frac_digits);
   return int_part + (int_part >= 0 ? fraction : -fraction);
+}
+
+template <std::integral result_t>
+constexpr auto to_integral(std::string_view str) noexcept -> std::optional<result_t>{
+  bool is_negative{false};
+  if (str.starts_with('-')) { is_negative = true; str.remove_prefix(1); }
+  if (!rng::all_of(str, [](auto c) { return c <= '9' && '0' <= c; })) { 
+    return std::nullopt; 
+  }
+  result_t result{};
+  for (auto c : str) { result = result * 10 + (c - '0'); }
+  return is_negative ? -result : result;
 }
 
 template <options opts, size_t capacity>
@@ -256,12 +307,11 @@ public:
     -> std::pair<std::optional<opt_type>, std::optional<error_code>> {        
       if constexpr (std::integral<opt_type>) {
         if (opt.value != option::integral) { return {{}, error_code::incorrect_type}; }
-        opt_type result{};
-        auto const [_, ec] = std::from_chars(raw_opt_value.data(), 
-                                             raw_opt_value.data() + raw_opt_value.size(), 
-                                             result);
-        if (ec != std::errc{}) { return {{}, error_code::conversion_error}; }
-        return {result, {}};
+        auto const match = ctre::match<"[\\-]?(0|[1-9]\\d*)">(raw_opt_value);
+        if (!match) { return {{}, error_code::conversion_error}; }
+        auto const opt_integral = to_integral<opt_type>(match.to_view());
+        if (!opt_integral) { return {{}, error_code::conversion_error}; }
+        return {*opt_integral, {}};
       } else if constexpr (std::is_same_v<opt_type, std::string_view>) { 
         if (opt.value != option::string) { return {{}, error_code::incorrect_type}; }
         return {raw_opt_value, {}};
@@ -275,31 +325,21 @@ public:
     
     constexpr auto raw_value_as_double(std::string_view str) const noexcept 
     -> std::pair<std::optional<long double>, std::optional<error_code>> {        
-      long long int_part{0};
-      auto const end_pos = rng::data(str) + rng::size(str);
-      auto const [ptr, ec] = std::from_chars(rng::data(str), end_pos, int_part);
+      auto const match = ctre::match<"([\\-]?(?:0|[1-9]\\d*))(?:\\.(\\d*))?">(str);
+      if (!match) { return {{}, error_code::conversion_error}; }
 
-      if (ec != std::errc{}) { return {{}, ctclp::error_code::conversion_error}; }
-      if (ptr == end_pos) { return {{static_cast<long double>(int_part)}, {}}; } 
-      if (*ptr != '.') { return {{}, ctclp::error_code::conversion_error}; }
+      auto const opt_int_part = to_integral<long long>(match.get<1>().to_view());
+      if (!opt_int_part) { return {{}, error_code::conversion_error}; }
+      long long int_part = *opt_int_part;
 
-      long long frac_part{0};
-      auto const [ptr_frac, ec_frac] = std::from_chars(rng::next(ptr), end_pos, frac_part);
-      if (ptr_frac != end_pos) { return {{}, ctclp::error_code::conversion_error}; }
+      auto const frac_part_view = match.get<2>().to_view();
+      if (frac_part_view.empty()) { return {{static_cast<long double>(int_part)}, {}}; } 
 
-      if (ec_frac != std::errc{} && std::distance(ptr+1, ptr_frac) == 0) { 
-          return {{static_cast<long double>(int_part)}, {}};
-      } 
+      auto const opt_frac_part = to_integral<long long>(frac_part_view);
+      long long frac_part = *opt_frac_part;
 
-      if (ec_frac != std::errc{}) { return {{}, ctclp::error_code::conversion_error}; }  
-
-      auto is_neg_zero = false;
-      if (auto const pos = str.find('.', 0); pos != std::string_view::npos) {
-          if (str.substr(0, pos) == "-0") { is_neg_zero = true; }
-      }
-
-      auto frac_digit = std::distance(rng::next(ptr), ptr_frac);
-      if (is_neg_zero) { frac_part = -frac_part; } 
+      auto frac_digit = frac_part_view.size();
+      if (str.starts_with("-0.")) { frac_part = -frac_part; }
 
       return {{to_double(int_part, frac_part, frac_digit)}, {}};    
     }
@@ -370,7 +410,7 @@ public:
     return std::tuple{
       std::tuple{
         std::string_view{std::string_view{opts.data[idx].name}},
-        fixed_string{to_char_array<std::strlen(opts.data[idx].name)>(opts.data[idx].name)},  
+        fixed_string{to_char_array<strlen(opts.data[idx].name)>(opts.data[idx].name)},  
         fixed_string{to_right_size<regex_array[idx].first, regex_array[idx].second>()}
       }...
     };
@@ -392,8 +432,6 @@ public:
   }();
 
 };
-
-
 
 } // ctclp
 
