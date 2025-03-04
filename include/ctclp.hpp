@@ -40,13 +40,10 @@ consteval auto to_string_view() {
 
 template <auto max_size, auto string_builder> 
 consteval auto to_array() {
-  constexpr auto result = [] {   
-    std::array<char, max_size> max_size_array{};
-    auto const end_pos = rng::copy(string_builder(), rng::begin(max_size_array));
-    auto const right_size = rng::distance(rng::cbegin(max_size_array), end_pos.out);
-    return std::pair{max_size_array, right_size};
-  }();
-  return result; 
+  std::array<char, max_size> max_size_array{};
+  auto const end_pos = rng::copy(string_builder(), rng::begin(max_size_array));
+  auto const right_size = rng::distance(rng::cbegin(max_size_array), end_pos.out);
+  return std::pair{max_size_array, right_size};
 }
 
 template <size_t size>
@@ -349,12 +346,12 @@ public:
 
   template <size_t argc, auto argv>
   static constexpr auto try_parse() noexcept {
-    return parser{}.parse<argc>(argv, std::make_index_sequence<argc>{});
+    return parser{}.parse<argc-1>(argv+1, std::make_index_sequence<argc-1>{});
   }
 
   template <size_t argc>
   static constexpr auto try_parse(char const* (&argv)[argc]) noexcept {
-    return parser{}.parse<argc>(argv, std::make_index_sequence<argc>{});
+    return parser{}.parse<argc-1>(argv+1, std::make_index_sequence<argc-1>{});
   }
 
 private:
