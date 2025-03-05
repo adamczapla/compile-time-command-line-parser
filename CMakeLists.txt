@@ -20,9 +20,9 @@ target_include_directories(ctclp INTERFACE
   ${ctre_SOURCE_DIR}/include
 )
 
-option(BUILD_EXAMPLES "Build example programs" ON)
+option(BUILD_TESTS "Build compile-time tests" ON)
 
-if(BUILD_EXAMPLES)
-    add_executable(example examples/main.cpp)
-    target_link_libraries(example PRIVATE ctclp)
+if (BUILD_TESTS)
+    add_executable(ctclp_tests tests/ctclp_tests.cpp)
+    target_link_libraries(ctclp_tests PRIVATE ctclp)
 endif()
