@@ -402,13 +402,13 @@ public:
     
   template <auto regex_array, size_t... idx>
   static constexpr auto make_regex_tuple(std::index_sequence<idx...>) noexcept {
-    return std::tuple{
+    return std::make_tuple(
       std::tuple{
         std::string_view{std::string_view{opts.data[idx].name}},
         fixed_string{to_char_array<strlen(opts.data[idx].name)>(opts.data[idx].name)},  
         fixed_string{to_right_size<regex_array[idx].first, regex_array[idx].second>()}
       }...
-    };
+    );
   }
 
   template <size_t... idx>
