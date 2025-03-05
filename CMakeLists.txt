@@ -12,4 +12,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(ctre)
 
-add_subdirectory(src)
+add_library(ctclp INTERFACE)
+target_compile_features(ctclp INTERFACE cxx_std_23)
+
+target_include_directories(ctclp INTERFACE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${ctre_SOURCE_DIR}/include
+)
+
+option(BUILD_EXAMPLES "Build example programs" ON)
+
+if(BUILD_EXAMPLES)
+    add_executable(example examples/main.cpp)
+    target_link_libraries(example PRIVATE ctclp)
+endif()
