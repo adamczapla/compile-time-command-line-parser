@@ -10,6 +10,7 @@
 #include <tuple>
 #include <concepts>
 #include <cstring>
+#include <iostream>
 
 namespace ctclp {
 
@@ -74,7 +75,7 @@ struct option {
   enum type : size_t { integral, floating_point, string };
   
   friend auto operator<<(std::ostream& os, type const& opt_type) -> std::ostream& {
-    constexpr std::array<std::string_view, 2> type_messages {"digit", "string"};
+    constexpr std::array<std::string_view, 3> type_messages {"integral", "floating_point", "string"};
     auto const num = static_cast<int>(opt_type);
     return os << "Option type: " << "(" << type_messages[num] << ")";
   }
@@ -145,7 +146,7 @@ constexpr auto to_char_array(const char* str) {
   return result;
 }
 
-constexpr auto strlen(const char* start) -> size_t {
+constexpr auto strlen(char const* start) -> size_t {
     char const* end = start;
     while (*end != '\0') { ++end; }
     return end - start;
@@ -171,10 +172,10 @@ struct options {
     constexpr auto opt_regex = to_string_view<128, [] {
        return std::apply([](auto const&... values) {
         size_t cnt{sizeof...(values)};
-        auto result = std::string{"\\s*(--"} + opt_name.to_string() + "=(?<" 
+        auto result = std::string{"^\\s*--"} + opt_name.to_string() + "=(?<" 
                                              + opt_name.to_string() + ">(";
         ((result += values.to_string() + (--cnt ? "|" : "")) , ...);
-        return result.append("))){0,1}");
+        return result.append("))\\s*$");
       }, opt_values{}.as_tuple());
     }>();
 
@@ -365,21 +366,21 @@ private:
     return result;
   }
 
+  
   template <size_t... indx>
   static constexpr auto get_parse_result(std::string_view input, std::index_sequence<indx...>) noexcept {
     std::optional<std::pair<size_t, std::string_view>> result{};
-    std::tuple match_result_tuple{
-      (input.contains(std::get<0>(std::get<indx>(regex_tuple)))
-        ? ctre::match<std::get<2>(std::get<indx>(regex_tuple))>(input)
-        : ctre::match<std::get<2>(std::get<indx>(regex_tuple))>(std::string_view{"..."}))
-      ...  
-    };
 
-    (void) ((std::get<indx>(match_result_tuple) 
-      ? (result = std::optional{std::pair{indx, std::string_view{std::get<indx>(match_result_tuple).
-        template get<std::get<1>(std::get<indx>(regex_tuple))>()}}})
-      : std::optional<std::pair<size_t, std::string_view>>{}), ...
-    );
+    (([&] {
+      if (input.contains(std::get<0>(std::get<indx>(regex_tuple)))) {
+        auto match_result = ctre::match<std::get<2>(std::get<indx>(regex_tuple))>(input);
+        if (match_result) {
+          result = std::optional{
+            std::pair{indx, std::string_view{match_result.template get<std::get<1>(std::get<indx>(regex_tuple))>()}
+          }};
+        }
+      }
+    }()), ...);
             
     return result;
   }
