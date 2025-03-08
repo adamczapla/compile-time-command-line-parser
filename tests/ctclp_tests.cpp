@@ -37,11 +37,7 @@ consteval auto test_integral() noexcept {
   static constexpr auto parser_result = ctclp::parser<opts, 256>::try_parse<argc, argv>();
   static_assert(parser_result, "test_integral: parsing failed."); 
   static constexpr auto result = parser_result.template get<"age", int>();
-  if constexpr (result.first.has_value()) {
-    static_assert(*result.first == 38, "test_integral: result does not match.");
-    return true;
-  }
-  return false;
+  static_assert(*result.first == 38, "test_integral: result does not match.");
 }
 
 consteval auto test_integral_default_value() noexcept {
@@ -90,7 +86,6 @@ consteval auto test_unknown_parameter() {
   static constexpr auto argc = std::size(argv);
   constexpr auto parser_result = ctclp::parser<opts, 256>::try_parse<argc, argv>();
   static_assert(!parser_result, "test_unknown_parameter: parser should fail on unknown param.");
-  return true;
 }
 
 consteval auto test_invalid_integral() noexcept {
@@ -100,7 +95,6 @@ consteval auto test_invalid_integral() noexcept {
   static constexpr auto argc = std::size(argv);
   constexpr auto parser_result = ctclp::parser<opts, 256>::try_parse<argc, argv>();
   static_assert(!parser_result, "test_invalid_integral: parser should fail on invalid number.");
-  return true;
 }
 
 consteval auto test_invalid_floating_point() {
@@ -111,7 +105,6 @@ consteval auto test_invalid_floating_point() {
   static constexpr auto argc = std::size(argv);
   constexpr auto parser_result = ctclp::parser<opts, 256>::try_parse<argc, argv>();
   static_assert(!parser_result, "test_invalid_floating_point: parser should fail on invalid float.");
-  return true;
 }
 
 consteval auto test_multiple_options() noexcept {
