@@ -211,3 +211,6 @@ Errors:
 ```
 
 Since `count=200` is not one of the allowed values (`1`, `10`, `100`), the program does not continue with invalid input.
+
+## License
+CTCLP is released under the [MIT License](./LICENSE).
