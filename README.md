@@ -215,6 +215,6 @@ Since `count=200` is not one of the allowed values (`1`, `10`, `100`), the progr
 ## License
 CTCLP is released under the [MIT License](./LICENSE).
 
-This project also uses **CTRE - Compile-time Regular Expressions** by Hana Dusíková, which is licensed under the **Apache License 2.0**.  
-The corresponding license can be found in the file [`LICENSE-CTRE`](./LICENSE-CTRE.txt).  
+This project also uses **CTRE - Compile-time Regular Expressions** by Hana Dusíková, which is licensed under the **Apache License 2.0**. The corresponding license can be found in the file [LICENSE-CTRE.txt](./LICENSE-CTRE.txt).  
+
 For more details, see: [CTRE GitHub Repository](https://github.com/hanickadot/compile-time-regular-expressions).
